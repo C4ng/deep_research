@@ -107,7 +107,7 @@ deep_research/
 
 ```bash
 # Clone and install
-git clone <repo-url>
+git clone https://github.com/C4ng/deep_research.git
 cd deep_research
 
 # Install runtime dependencies
