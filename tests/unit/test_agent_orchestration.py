@@ -113,7 +113,7 @@ def test_execute_task_single_loop_when_reviewer_satisfied(monkeypatch: pytest.Mo
 
 
 def test_execute_task_multi_loop_until_threshold(monkeypatch: pytest.MonkeyPatch):
-    agent = _setup_agent(monkeypatch, max_loops=3)
+    agent = _setup_agent(monkeypatch, max_loops=2)
 
     calls: list[str] = []
     loop_index = {"value": 0}

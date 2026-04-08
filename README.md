@@ -38,7 +38,7 @@ The reviewer acts as a feedback controller between search and summarization:
 1. After each search pass, the summarizer creates a draft findings summary.
 2. The reviewer scores it on four dimensions (coverage, reliability, clarity, overall) using a structured JSON rubric.
 3. If `should_reresearch=true` and the loop cap hasn't been reached, the agent refines its query using reviewer recommendations and runs another search pass.
-4. This creates a bounded iterative improvement loop (max 2 iterations per task) that improves factual robustness without unbounded cost.
+4. This creates a bounded iterative improvement loop (configurable via `MAX_WEB_RESEARCH_LOOPS`) that improves factual robustness without unbounded cost.
 
 ### Caching Strategy
 
@@ -174,8 +174,8 @@ make typecheck
 |----------|-----------|
 | Reviewer uses strict JSON output | Machine-parseable rubric scores drive control flow; Markdown would require fragile extraction |
 | Summarizer/Reporter use Markdown | User-facing narrative output benefits from rich formatting |
-| Max 2 search iterations per task | Bounds latency and cost while still allowing targeted quality improvement |
-| Max 2 tasks per topic | Keeps research focused; prevents scope explosion on broad topics |
+| Configurable search iterations per task (`MAX_WEB_RESEARCH_LOOPS`) | Bounds latency and cost while still allowing targeted quality improvement (default 3) |
+| Configurable tasks per topic (`MAX_TASKS_PER_TOPIC`) | Keeps research focused; prevents scope explosion on broad topics (default 3) |
 | Dual cache (memory + filesystem) | In-memory for within-session dedup; filesystem for cross-restart persistence |
 | Reviewer evaluates summarized findings | Avoids feeding verbose raw search context into reviewer, reducing truncation risk |
 | Tenacity retry with separate policies | Rate-limit errors need longer backoff than transient server errors |

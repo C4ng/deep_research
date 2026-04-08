@@ -13,7 +13,13 @@ class Configuration(BaseModel):
     max_web_research_loops: int = Field(
         default=3,
         title="Research Depth",
-        description="Number of research iterations to perform",
+        description="Max search-review iterations per task (reflection loop cap)",
+    )
+
+    max_tasks_per_topic: int = Field(
+        default=3,
+        title="Max Tasks Per Topic",
+        description="Max number of sub-tasks the planner can execute per research topic",
     )
 
     search_api: SearchAPI = Field(

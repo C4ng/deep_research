@@ -109,8 +109,9 @@ class DeepResearchAgent:
     # Shared setup helpers
     # ------------------------------------------------------------------
 
-    def _plan_tasks(self, topic: str, state: SummaryState, *, max_tasks: int = 2) -> None:
-        """Load or generate planned tasks and cap at *max_tasks*."""
+    def _plan_tasks(self, topic: str, state: SummaryState) -> None:
+        """Load or generate planned tasks and cap at config.max_tasks_per_topic."""
+        max_tasks = self.config.max_tasks_per_topic
         cached_planner = stage_file_cache.load(topic, "planner")
         state.todo_items = self._deserialize_cached_tasks(cached_planner)
         if state.todo_items:
@@ -431,7 +432,7 @@ class DeepResearchAgent:
         notices: list[str] = []
         review: TaskReview | None = None
 
-        max_loops = min(self.config.max_web_research_loops, 2)
+        max_loops = self.config.max_web_research_loops
         for loop_index in range(max_loops):
             executed_loops = loop_index + 1
             logger.info("Search loop %d for task %d (query=%s)", loop_index + 1, task.id, current_query)
