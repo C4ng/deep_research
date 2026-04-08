@@ -1,5 +1,3 @@
-import pytest
-
 from backend.src.config import Configuration
 from backend.src.models import SummaryState, TodoItem
 from backend.src.services.planner import PlanningService
@@ -83,4 +81,3 @@ def test_planning_extract_tasks_and_fallback():
     assert isinstance(task, TodoItem)
     assert "Background Research" in task.title
     assert "AI agents" in task.query
-

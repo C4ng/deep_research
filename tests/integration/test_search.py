@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from agent.src.tools.builtin.search_tools import SearchTool
+from agent.src.tools.builtin.search_tools import SearchTool  # noqa: E402
 
 
 @pytest.mark.integration

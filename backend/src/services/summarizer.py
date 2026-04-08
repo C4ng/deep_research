@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import logging
+from collections.abc import Callable, Iterator
 
 from agent.src.agents.simple_agent import SimpleAgent
-
-from backend.src.models import SummaryState, TodoItem
-from backend.src.utils import strip_thinking_tokens
 from backend.src.cache import llm_cache
 from backend.src.exceptions import SummarizationError
+from backend.src.models import SummaryState, TodoItem
+from backend.src.utils import strip_thinking_tokens
 
-from typing import Tuple, Iterator
-
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -66,86 +63,82 @@ class SummarizationService:
             llm_cache.set("summarizer", prompt, summary_text)
 
         return summary_text or "No available information"
-    
+
     def stream_task_summary(
         self, state: SummaryState, task: TodoItem, context: str
-        ) -> Tuple[Iterator[str], Callable[[], str]]:
-            prompt = self._build_prompt(state, task, context)
-            remove_thinking = self._strip_thinking_tokens
-            cached = llm_cache.get("summarizer", prompt)
+    ) -> tuple[Iterator[str], Callable[[], str]]:
+        prompt = self._build_prompt(state, task, context)
+        remove_thinking = self._strip_thinking_tokens
+        cached = llm_cache.get("summarizer", prompt)
 
-            # If we already have a cached summary, stream from cache instead of calling LLM.
-            if cached is not None:
-                def cached_gen() -> Iterator[str]:
-                    if cached:
-                        yield cached
+        # If we already have a cached summary, stream from cache instead of calling LLM.
+        if cached is not None:
 
-                def cached_get() -> str:
-                    return cached
+            def cached_gen() -> Iterator[str]:
+                if cached:
+                    yield cached
 
-                return cached_gen(), cached_get
+            def cached_get() -> str:
+                return str(cached)
 
-            raw_buffer = ""
-            visible_output = ""
-            emit_index = 0
-            agent = self._agent_factory()
-        
-            def flush_visible() -> Iterator[str]:
-                nonlocal emit_index, raw_buffer
-                while True:
-                    start = raw_buffer.find("<think>", emit_index)
-                    if start == -1:
-                        if emit_index < len(raw_buffer):
-                            segment = raw_buffer[emit_index:]
-                            emit_index = len(raw_buffer)
-                            if segment:
-                                yield segment
-                        break
+            return cached_gen(), cached_get
 
-                    if start > emit_index:
-                        segment = raw_buffer[emit_index:start]
-                        emit_index = start
+        raw_buffer = ""
+        visible_output = ""
+        emit_index = 0
+        agent = self._agent_factory()
+
+        def flush_visible() -> Iterator[str]:
+            nonlocal emit_index, raw_buffer
+            while True:
+                start = raw_buffer.find("<think>", emit_index)
+                if start == -1:
+                    if emit_index < len(raw_buffer):
+                        segment = raw_buffer[emit_index:]
+                        emit_index = len(raw_buffer)
                         if segment:
                             yield segment
+                    break
 
-                    end = raw_buffer.find("</think>", start)
-                    if end == -1:
-                        break
-                    emit_index = end + len("</think>")
+                if start > emit_index:
+                    segment = raw_buffer[emit_index:start]
+                    emit_index = start
+                    if segment:
+                        yield segment
 
-            def generator() -> Iterator[str]:
-                nonlocal raw_buffer, visible_output, emit_index
-                try:
-                    for chunk in agent.stream_run(prompt):
-                        raw_buffer += chunk
-                        if remove_thinking:
-                            for segment in flush_visible():
-                                visible_output += segment
-                                if segment:
-                                    yield segment
-                        else:
-                            visible_output += chunk
-                            if chunk:
-                                yield chunk
-                finally:
+                end = raw_buffer.find("</think>", start)
+                if end == -1:
+                    break
+                emit_index = end + len("</think>")
+
+        def generator() -> Iterator[str]:
+            nonlocal raw_buffer, visible_output, emit_index
+            try:
+                for chunk in agent.stream_run(prompt):
+                    raw_buffer += chunk
                     if remove_thinking:
                         for segment in flush_visible():
                             visible_output += segment
                             if segment:
                                 yield segment
-                    agent.clear_history()
-                
-            
-            def get_summary() -> str:
+                    else:
+                        visible_output += chunk
+                        if chunk:
+                            yield chunk
+            finally:
                 if remove_thinking:
-                    cleaned = strip_thinking_tokens(visible_output)
-                else:
-                    cleaned = visible_output
-                return cleaned
-            
-            return generator(), get_summary
+                    for segment in flush_visible():
+                        visible_output += segment
+                        if segment:
+                            yield segment
+                agent.clear_history()
 
-   
+        def get_summary() -> str:
+            cleaned = strip_thinking_tokens(visible_output) if remove_thinking else visible_output
+            return cleaned
+
+        return generator(), get_summary
+
     def _build_prompt(self, state: SummaryState, task: TodoItem, context: str) -> str:
         """Construct the summarization prompt shared by both modes."""
 

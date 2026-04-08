@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from agent.src.agents.simple_agent import SimpleAgent
-
-from backend.src.models import SummaryState, TodoItem, TaskReview
-from backend.src.utils import strip_thinking_tokens
-from backend.src.cache import llm_cache
-from backend.src.exceptions import ReviewError
-
 import json
 import logging
 import re
+from typing import Any
+
+from agent.src.agents.simple_agent import SimpleAgent
+from backend.src.cache import llm_cache
+from backend.src.models import SummaryState, TaskReview, TodoItem
+from backend.src.utils import strip_thinking_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +99,14 @@ class ReviewerService:
             notes=f"{self._fallback_marker} {notes}",
         )
 
-    def _extract_json_payload(self, text: str) -> dict:
+    def _extract_json_payload(self, text: str) -> dict[str, Any]:
         """Extract a JSON object from a possibly wrapped LLM output."""
 
         text = self._strip_code_fences(text.strip())
         # Fast path: direct JSON
         try:
-            return json.loads(text)
+            result: dict[str, Any] = json.loads(text)
+            return result
         except Exception:
             pass
 
@@ -124,7 +124,8 @@ class ReviewerService:
                 depth -= 1
                 if depth == 0:
                     candidate = text[start : i + 1]
-                    return json.loads(candidate)
+                    parsed: dict[str, Any] = json.loads(candidate)
+                    return parsed
 
         raise ValueError("Unbalanced braces in reviewer output")
 
@@ -259,7 +260,20 @@ class ReviewerService:
         if not values:
             return []
         # First match is often the key itself; drop key-like entries.
-        filtered = [v for v in values if v not in {"recommendations", "notes", "coverage_score", "reliability_score", "clarity_score", "overall_score", "should_reresearch"}]
+        filtered = [
+            v
+            for v in values
+            if v
+            not in {
+                "recommendations",
+                "notes",
+                "coverage_score",
+                "reliability_score",
+                "clarity_score",
+                "overall_score",
+                "should_reresearch",
+            }
+        ]
         return [v.strip() for v in filtered[:4] if v.strip()]
 
     def _extract_notes(self, text: str) -> str:
@@ -268,4 +282,3 @@ class ReviewerService:
         if not m:
             return ""
         return m.group(1).strip()
-

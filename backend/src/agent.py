@@ -1,29 +1,30 @@
-from typing import Any, Iterator
+import hashlib
+import logging
+from collections.abc import Callable, Iterator
+from pathlib import Path
+from queue import Empty, Queue
+from threading import Lock, Thread
+from typing import Any
 
-from backend.src.config import Configuration
-from agent.src.llm import LLM
 from agent.src.agents.simple_agent import SimpleAgent
+from agent.src.llm import LLM
+from backend.src.cache import stage_file_cache
+from backend.src.config import Configuration
+from backend.src.models import SummaryState, SummaryStateOutput, TaskReview, TaskStatus, TodoItem
 from backend.src.prompts import (
-    todo_planner_system_prompt,
-    task_summarizer_instructions,
     report_writer_instructions,
     reviewer_instructions,
+    task_summarizer_instructions,
+    todo_planner_system_prompt,
 )
 from backend.src.services.planner import PlanningService
-from backend.src.services.summarizer import SummarizationService
 from backend.src.services.reporter import ReportingService
 from backend.src.services.reviewer import ReviewerService
 from backend.src.services.search import dispatch_search, prepare_research_context
-from backend.src.models import SummaryState, SummaryStateOutput, TodoItem, TaskStatus, TaskReview
-from backend.src.cache import stage_file_cache
-from threading import Lock, Thread
-from typing import Callable
-from queue import Queue, Empty
-from pathlib import Path
+from backend.src.services.summarizer import SummarizationService
 
-import hashlib
-import logging
 logger = logging.getLogger(__name__)
+
 
 class DeepResearchAgent:
     """Coordinator orchestrating TODO-based research workflow."""
@@ -57,7 +58,7 @@ class DeepResearchAgent:
 
         # Reporter
         self.report_agent = self._create_simple_agent(
-          name="Report Writer",
+            name="Report Writer",
             system_prompt=report_writer_instructions.strip(),
         )
         self.reporting = ReportingService(self.report_agent, self.config.strip_thinking_tokens)
@@ -80,7 +81,7 @@ class DeepResearchAgent:
             llm_kwargs["base_url"] = self.config.llm_base_url
 
         return LLM(**llm_kwargs)
-    
+
     def _create_simple_agent(self, *, name: str, system_prompt: str) -> SimpleAgent:
         """Instantiate a SimpleAgent for planning tasks."""
         return SimpleAgent(
@@ -104,7 +105,7 @@ class DeepResearchAgent:
             except Exception:
                 continue
         return parsed
-    
+
     # ------------------------------------------------------------------
     # Shared setup helpers
     # ------------------------------------------------------------------
@@ -133,7 +134,7 @@ class DeepResearchAgent:
         """Load or generate the final report and persist it."""
         cached_report = stage_file_cache.load(topic, "final_report")
         if cached_report and isinstance(cached_report.get("report"), str):
-            report = cached_report["report"]
+            report: str = cached_report["report"]
             logger.info("Final report cache hit for topic %r", topic)
         else:
             report = self.reporting.generate_report(state)
@@ -269,13 +270,13 @@ class DeepResearchAgent:
                 )
             finally:
                 enqueue({"type": "__task_done__", "task_id": task.id})
-        
+
         for task in state.todo_items:
             step = channel_map.get(task.id, {}).get("step", 0)
             thread = Thread(target=worker, args=(task, step), daemon=True)
             threads.append(thread)
             thread.start()
-        
+
         active_workers = len(state.todo_items)
         finished_workers = 0
 
@@ -327,12 +328,20 @@ class DeepResearchAgent:
         cached_summary = stage_file_cache.load(topic, "summary", task.id)
         logger.info(
             "Task %d cache probe: search=%s review=%s summary=%s",
-            task.id, bool(cached_search), bool(cached_review), bool(cached_summary),
+            task.id,
+            bool(cached_search),
+            bool(cached_review),
+            bool(cached_summary),
         )
 
         # --- Stage 1: search (+ inline reflection loop) ----------------
         search_ctx = self._run_search_stage(
-            state, task, topic, cached_search, emit_stream, step,
+            state,
+            task,
+            topic,
+            cached_search,
+            emit_stream,
+            step,
         )
         if search_ctx is None:
             return
@@ -341,13 +350,23 @@ class DeepResearchAgent:
         # Emit search results to SSE clients.
         if emit_stream:
             yield from self._emit_search_events(
-                task, combined_sources, combined_context, backend, notices, step,
+                task,
+                combined_sources,
+                combined_context,
+                backend,
+                notices,
+                step,
             )
 
         # --- Stage 2: review -------------------------------------------
         review = self._resolve_review(
-            state, task, topic, review, loop_reviews,
-            cached_review, combined_context,
+            state,
+            task,
+            topic,
+            review,
+            loop_reviews,
+            cached_review,
+            combined_context,
         )
         task.review_notes = review.notes
 
@@ -356,13 +375,21 @@ class DeepResearchAgent:
 
         logger.info(
             "Review for task %d: overall_score=%.3f should_reresearch=%s",
-            task.id, review.overall_score, review.should_reresearch,
+            task.id,
+            review.overall_score,
+            review.should_reresearch,
         )
 
         # --- Stage 3: summary ------------------------------------------
         yield from self._run_summary_stage(
-            state, task, topic, review, combined_context,
-            cached_summary, emit_stream, step,
+            state,
+            task,
+            topic,
+            review,
+            combined_context,
+            cached_summary,
+            emit_stream,
+            step,
         )
 
         task.status = TaskStatus.COMPLETED
@@ -438,13 +465,18 @@ class DeepResearchAgent:
             logger.info("Search loop %d for task %d (query=%s)", loop_index + 1, task.id, current_query)
 
             search_result, notices, answer_text, backend = dispatch_search(
-                current_query, self.config.search_api, self.config.fetch_full_page, state.research_loop_count,
+                current_query,
+                self.config.search_api.value,
+                self.config.fetch_full_page,
+                state.research_loop_count,
             )
             task.notices = notices
 
             if not search_result or not search_result.get("results"):
                 task.status = TaskStatus.SKIPPED
-                stage_file_cache.save(topic, "search", {"status": TaskStatus.SKIPPED.value, "query": task.query}, task.id)
+                stage_file_cache.save(
+                    topic, "search", {"status": TaskStatus.SKIPPED.value, "query": task.query}, task.id
+                )
                 return None
 
             sources_summary, context = prepare_research_context(search_result, answer_text, self.config.fetch_full_page)
@@ -463,23 +495,46 @@ class DeepResearchAgent:
             reviewer_input = self._build_reviewer_input(state, task, combined_context)
             review = self.reviewer.review_task(state, task, reviewer_input)
             task.review_notes = review.notes
-            loop_reviews.append({
-                "loop_index": loop_index + 1, "query": current_query,
-                "reviewer_input_preview": reviewer_input[:300], "review": review.model_dump(),
-            })
+            loop_reviews.append(
+                {
+                    "loop_index": loop_index + 1,
+                    "query": current_query,
+                    "reviewer_input_preview": reviewer_input[:300],
+                    "review": review.model_dump(),
+                }
+            )
 
             logger.info(
                 "Review for task %d: overall_score=%.3f should_reresearch=%s",
-                task.id, review.overall_score, review.should_reresearch,
+                task.id,
+                review.overall_score,
+                review.should_reresearch,
             )
-            loop_trace.append({
-                "loop_index": loop_index + 1, "query": current_query,
-                "overall_score": review.overall_score, "should_reresearch": review.should_reresearch,
-                "recommendations": review.recommendations, "notes_preview": (review.notes or "")[:300],
-            })
+            loop_trace.append(
+                {
+                    "loop_index": loop_index + 1,
+                    "query": current_query,
+                    "overall_score": review.overall_score,
+                    "should_reresearch": review.should_reresearch,
+                    "recommendations": review.recommendations,
+                    "notes_preview": (review.notes or "")[:300],
+                }
+            )
 
-            self._save_search_cache(topic, task, executed_loops, combined_context, combined_sources, backend, notices, loop_trace, status="in_progress")
-            stage_file_cache.save(topic, "review", {"review": review.model_dump(), "loop_reviews": loop_reviews}, task.id)
+            self._save_search_cache(
+                topic,
+                task,
+                executed_loops,
+                combined_context,
+                combined_sources,
+                backend,
+                notices,
+                loop_trace,
+                status="in_progress",
+            )
+            stage_file_cache.save(
+                topic, "review", {"review": review.model_dump(), "loop_reviews": loop_reviews}, task.id
+            )
 
             if review.should_reresearch and (loop_index + 1) < max_loops:
                 if review.recommendations:
@@ -490,33 +545,60 @@ class DeepResearchAgent:
                 continue
             break
 
-        self._save_search_cache(topic, task, executed_loops, combined_context, combined_sources, backend, notices, loop_trace, status="ok")
+        self._save_search_cache(
+            topic, task, executed_loops, combined_context, combined_sources, backend, notices, loop_trace, status="ok"
+        )
         logger.info("Search stage cache saved for topic=%r task=%d (loops=%d)", topic, task.id, executed_loops)
         return combined_context, combined_sources, backend, notices, review, loop_reviews
 
     def _save_search_cache(
-        self, topic: str, task: TodoItem, executed_loops: int,
-        combined_context: str, combined_sources: str, backend: str,
-        notices: list[str], loop_trace: list[dict[str, Any]], *, status: str,
+        self,
+        topic: str,
+        task: TodoItem,
+        executed_loops: int,
+        combined_context: str,
+        combined_sources: str,
+        backend: str,
+        notices: list[str],
+        loop_trace: list[dict[str, Any]],
+        *,
+        status: str,
     ) -> None:
-        stage_file_cache.save(topic, "search", {
-            "status": status, "query": task.query, "executed_loops": executed_loops,
-            "combined_context": combined_context, "combined_sources": combined_sources,
-            "backend": backend, "notices": notices, "loop_trace": loop_trace,
-        }, task.id)
+        stage_file_cache.save(
+            topic,
+            "search",
+            {
+                "status": status,
+                "query": task.query,
+                "executed_loops": executed_loops,
+                "combined_context": combined_context,
+                "combined_sources": combined_sources,
+                "backend": backend,
+                "notices": notices,
+                "loop_trace": loop_trace,
+            },
+            task.id,
+        )
 
     @staticmethod
     def _emit_search_events(
-        task: TodoItem, combined_sources: str, combined_context: str,
-        backend: str, notices: list[str], step: int | None,
+        task: TodoItem,
+        combined_sources: str,
+        combined_context: str,
+        backend: str,
+        notices: list[str],
+        step: int | None,
     ) -> Iterator[dict[str, Any]]:
         for notice in notices:
             if notice:
                 yield {"type": "status", "message": notice, "task_id": task.id, "step": step}
         yield {
-            "type": "sources", "task_id": task.id,
-            "latest_sources": combined_sources, "raw_context": combined_context,
-            "step": step, "backend": backend,
+            "type": "sources",
+            "task_id": task.id,
+            "latest_sources": combined_sources,
+            "raw_context": combined_context,
+            "step": step,
+            "backend": backend,
         }
 
     def _resolve_review(
@@ -532,7 +614,9 @@ class DeepResearchAgent:
         """Resolve a TaskReview from cache, existing loop result, or fresh call."""
         if review is not None:
             if not self.reviewer.is_fallback_review(review):
-                stage_file_cache.save(topic, "review", {"review": review.model_dump(), "loop_reviews": loop_reviews}, task.id)
+                stage_file_cache.save(
+                    topic, "review", {"review": review.model_dump(), "loop_reviews": loop_reviews}, task.id
+                )
             return review
 
         if cached_review and isinstance(cached_review.get("review"), dict):
@@ -587,14 +671,20 @@ class DeepResearchAgent:
             else:
                 summary_text = self.summarizer.summarize_task(state, task, combined_context)
 
-            stage_file_cache.save(topic, "summary", {
-                "summary": summary_text or "", "review_notes": task.review_notes or "",
-                "review_overall_score": review.overall_score,
-                "review_should_reresearch": review.should_reresearch,
-            }, task.id)
+            stage_file_cache.save(
+                topic,
+                "summary",
+                {
+                    "summary": summary_text or "",
+                    "review_notes": task.review_notes or "",
+                    "review_overall_score": review.overall_score,
+                    "review_should_reresearch": review.should_reresearch,
+                },
+                task.id,
+            )
 
         task.summary = summary_text.strip() if summary_text else "No available information"
-    
+
     def _serialize_task(self, task: TodoItem) -> dict[str, Any]:
         """Convert task dataclass to serializable dict for frontend."""
         return {
@@ -621,6 +711,3 @@ class DeepResearchAgent:
             task.review_notes = previous_notes
         logger.info("Built reviewer input from summarized findings for task %d", task.id)
         return draft
-
-
-       

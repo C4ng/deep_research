@@ -1,5 +1,3 @@
-import pytest
-
 from backend.src.models import SummaryState, TodoItem
 from backend.src.services.summarizer import SummarizationService
 
@@ -60,4 +58,3 @@ def test_summarizer_strips_thinking_tokens_when_enabled():
 
     assert "hidden" not in summary
     assert "Visible summary" in summary
-

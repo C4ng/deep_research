@@ -1,7 +1,7 @@
 import pytest
 
-from backend.src.config import Configuration
 import backend.src.services.search as search_module
+from backend.src.config import Configuration
 
 
 class _FakeSearchTool:
@@ -58,4 +58,3 @@ def test_dispatch_search_text_notice(monkeypatch: pytest.MonkeyPatch) -> None:
     assert payload["results"] == []
     assert payload["backend"] == backend
     assert answer is None
-

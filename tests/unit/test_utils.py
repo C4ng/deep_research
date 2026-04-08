@@ -1,7 +1,7 @@
 from backend.src.utils import (
-    strip_thinking_tokens,
     deduplicate_and_format_sources,
     format_sources,
+    strip_thinking_tokens,
 )
 
 

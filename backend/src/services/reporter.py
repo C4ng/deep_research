@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from agent.src.agents.simple_agent import SimpleAgent
+import logging
 
-from backend.src.models import SummaryState
-from backend.src.utils import strip_thinking_tokens
+from agent.src.agents.simple_agent import SimpleAgent
 from backend.src.cache import llm_cache
 from backend.src.exceptions import ReportError
-
-import logging
+from backend.src.models import SummaryState
+from backend.src.utils import strip_thinking_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +35,8 @@ class ReportingService:
                 f"- Task summary: \n{summary_block}\n"
                 f"- Sources summary: \n{sources_block}\n"
             )
-            
-        prompt = (
-            f"Research topic: {state.research_topic}\n"
-            f"Task overview: \n{''.join(tasks_block)}\n"
-        )
+
+        prompt = f"Research topic: {state.research_topic}\nTask overview: \n{''.join(tasks_block)}\n"
 
         logger.debug("Reporter prompt (truncated): %s", prompt[:1000])
 
@@ -65,4 +61,3 @@ class ReportingService:
             llm_cache.set("reporter", prompt, report_text)
 
         return report_text or "Report generation failed, please check the input."
-

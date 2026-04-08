@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import Any, Dict, List
-
-import re
 
 import logging
+import re
+from typing import Any
+
 logger = logging.getLogger(__name__)
 
 CHARS_PER_TOKEN = 4
@@ -44,25 +44,23 @@ def _clean_web_text(text: str) -> str:
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
+
 def deduplicate_and_format_sources(
-    search_response: Dict[str, Any] | List[Dict[str, Any]],
+    search_response: dict[str, Any] | list[dict[str, Any]],
     max_tokens_per_source: int,
     *,
     fetch_full_page: bool = False,
 ) -> str:
     """Format and deduplicate search results for downstream prompting.
-    
+
     Note: Results from search_tool are already deduplicated, but we deduplicate
     again here as a defensive measure in case results come from other sources.
     """
 
-    if isinstance(search_response, dict):
-        sources_list = search_response.get("results", [])
-    else:
-        sources_list = search_response
+    sources_list = search_response.get("results", []) if isinstance(search_response, dict) else search_response
 
     # Deduplicate by URL (defensive - results should already be deduplicated by search_tool)
-    unique_sources: dict[str, Dict[str, Any]] = {}
+    unique_sources: dict[str, dict[str, Any]] = {}
     for source in sources_list:
         url = source.get("url")
         if not url:
@@ -70,7 +68,7 @@ def deduplicate_and_format_sources(
         if url not in unique_sources:
             unique_sources[url] = source
 
-    formatted_parts: List[str] = []
+    formatted_parts: list[str] = []
     for source in unique_sources.values():
         title = source.get("title") or source.get("url", "")
         content = _clean_web_text(source.get("content", ""))
@@ -87,14 +85,12 @@ def deduplicate_and_format_sources(
             char_limit = max_tokens_per_source * CHARS_PER_TOKEN
             if len(raw_content) > char_limit:
                 raw_content = f"{raw_content[:char_limit]}... [truncated]"
-            formatted_parts.append(
-                f"Content limited to {max_tokens_per_source} tokens: {raw_content}\n\n"
-            )
+            formatted_parts.append(f"Content limited to {max_tokens_per_source} tokens: {raw_content}\n\n")
 
     return "".join(formatted_parts).strip()
 
 
-def format_sources(search_results: Dict[str, Any] | None) -> str:
+def format_sources(search_results: dict[str, Any] | None) -> str:
     """Return bullet list summarising search sources."""
 
     if not search_results:
@@ -102,7 +98,5 @@ def format_sources(search_results: Dict[str, Any] | None) -> str:
 
     results = search_results.get("results", [])
     return "\n".join(
-        f"* {item.get('title', item.get('url', ''))} : {item.get('url', '')}"
-        for item in results
-        if item.get("url")
+        f"* {item.get('title', item.get('url', ''))} : {item.get('url', '')}" for item in results if item.get("url")
     )

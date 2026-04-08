@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 
 import pytest
 
 from backend.src.cache import LLMCache, StageFileCache
 
-
 # ---------------------------------------------------------------------------
 # LLMCache
 # ---------------------------------------------------------------------------
 
-class TestLLMCache:
 
+class TestLLMCache:
     def test_get_returns_none_on_miss(self):
         cache = LLMCache()
         assert cache.get("ns", "prompt") is None
@@ -51,8 +48,8 @@ class TestLLMCache:
 # StageFileCache
 # ---------------------------------------------------------------------------
 
-class TestStageFileCache:
 
+class TestStageFileCache:
     @pytest.fixture(autouse=True)
     def _enable_file_cache(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("DEEP_RESEARCH_FILE_CACHE", "1")

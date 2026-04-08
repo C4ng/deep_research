@@ -1,21 +1,19 @@
-import os
 import importlib.util
-from pydantic import BaseModel, Field
-from typing import Literal, Any, Dict, Iterable
+import logging
+import os
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from typing import Any, Literal
 
+from pydantic import BaseModel, Field
+from tavily import TavilyClient
 
 from agent.src.tools.base import Tool
 
-from tavily import TavilyClient 
-
-import logging
 logger = logging.getLogger(__name__)
 
 CHARS_PER_TOKEN = 4
-SUPPORTED_BACKENDS = Literal[
-    "tavily",
-]
+SUPPORTED_BACKENDS = Literal["tavily",]
 SUPPORTED_RETURN_MODES = Literal[
     "text",
     "structured",
@@ -28,14 +26,15 @@ def _limit_text(text: str, token_limit: int) -> str:
         return text
     return text[:char_limit] + "... [truncated]"
 
+
 def _normalized_result(
     *,
     title: str,
     url: str,
     content: str,
     raw_content: str | None,
-) -> Dict[str, str]:
-    payload: Dict[str, str] = {
+) -> dict[str, str]:
+    payload: dict[str, str] = {
         "title": title or url,
         "url": url,
         "content": content or "",
@@ -46,18 +45,19 @@ def _normalized_result(
 
 
 def _structured_payload(
-    results: Iterable[Dict[str, Any]],
+    results: Iterable[dict[str, Any]],
     *,
     backend: str,
     answer: str | None = None,
     notices: Iterable[str] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "results": list(results),
         "backend": backend,
         "answer": answer,
         "notices": list(notices or []),
     }
+
 
 class SearchProvider(ABC):
     @abstractmethod
@@ -69,9 +69,10 @@ class SearchProvider(ABC):
     def search(self, query: str, max_results: int) -> list[dict]:
         pass
 
+
 class TavilyProvider(SearchProvider):
     def __init__(self):
-        self._client = None 
+        self._client = None
 
     def is_available(self) -> bool:
         has_lib = importlib.util.find_spec("tavily") is not None
@@ -90,20 +91,15 @@ class TavilyProvider(SearchProvider):
             logger.info("Tavily client initialized and cached.")
         return self._client
 
-    def search(
-            self, 
-            query: str, 
-            fetch_full_page: bool, 
-            max_results: int, 
-            max_tokens: int, 
-            loop_count: int
-        ) -> list[dict]:
+    def search(  # type: ignore[override]
+        self, query: str, fetch_full_page: bool, max_results: int, max_tokens: int, loop_count: int
+    ) -> list[dict]:
 
         response = self._get_client().search(  # type: ignore[call-arg]
             query=query,
             max_results=max_results,
             include_raw_content=fetch_full_page,
-            include_answer=True, 
+            include_answer=True,
         )
 
         results = []
@@ -122,7 +118,7 @@ class TavilyProvider(SearchProvider):
                 )
             )
 
-        return _structured_payload(
+        return _structured_payload(  # type: ignore[return-value]
             results,
             backend="tavily",
             answer=response.get("answer"),
@@ -131,10 +127,7 @@ class TavilyProvider(SearchProvider):
 
 class SearchSchema(BaseModel):
     query: str = Field(..., description="The search query keywords")
-    backend: SUPPORTED_BACKENDS = Field(
-        default="tavily", 
-        description="The search engine to use"
-    )
+    backend: SUPPORTED_BACKENDS = Field(default="tavily", description="The search engine to use")
     return_mode: SUPPORTED_RETURN_MODES = Field(default="text", description="The mode to return the results in")
     max_results: int = Field(default=5, ge=1, le=10, description="Number of results to return")
     fetch_full_page: bool = Field(default=False, description="Whether to scrape the full content of the pages")
@@ -150,39 +143,37 @@ class SearchTool(Tool):
         return SearchSchema
 
     def __init__(self) -> None:
-        super().__init__(
-            name="search",
-            description=f"Search the web."
-        )
+        super().__init__(name="search", description="Search the web.")
         self.providers = {
             "tavily": TavilyProvider(),
         }
-     
-    def _execute(
-        self, 
-        query: str, 
-        backend: SUPPORTED_BACKENDS, 
+
+    def _execute(  # type: ignore[override]
+        self,
+        query: str,
+        backend: SUPPORTED_BACKENDS,
         return_mode: SUPPORTED_RETURN_MODES,
-        max_results: int, 
+        max_results: int,
         fetch_full_page: bool,
         max_tokens: int,
         loop_count: int,
     ) -> str:
         """
-        The core logic. 
+        The core logic.
         kwargs are now automatically mapped to these named arguments!
         """
 
         results = []
-        
+
         provider = self.providers.get(backend)
         if provider and provider.is_available():
             results = provider.search(
                 query=query,
-                fetch_full_page=fetch_full_page, 
+                fetch_full_page=fetch_full_page,
                 max_results=max_results,
                 max_tokens=max_tokens,
-                loop_count=loop_count)
+                loop_count=loop_count,
+            )
         else:
             # Tell the LLM why it failed so it can try another way
             return f"Error: Backend '{backend}' is currently unavailable (check API keys or installation)."
@@ -191,12 +182,12 @@ class SearchTool(Tool):
             return "No relevant search results found. Try broader keywords."
 
         if return_mode == "structured":
-            return results
+            return results  # type: ignore[return-value]
 
         # 3. Format the final output for the LLM
-        return self._format_text_response(query=query, payload=results)
-    
-    def _format_text_response(self, *, query: str, payload: Dict[str, Any]) -> str:
+        return self._format_text_response(query=query, payload=results)  # type: ignore[arg-type]
+
+    def _format_text_response(self, *, query: str, payload: dict[str, Any]) -> str:
         answer = payload.get("answer")
         notices = payload.get("notices") or []
         results = payload.get("results") or []

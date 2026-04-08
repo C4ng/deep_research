@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from backend.src.exceptions import SearchError
 
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass  # dotenv is optional
 
-from agent.src.tools.builtin.search_tools import SearchTool, SUPPORTED_BACKENDS
-
+from agent.src.tools.builtin.search_tools import SUPPORTED_BACKENDS, SearchTool
 from backend.src.utils import (
     deduplicate_and_format_sources,
     format_sources,
@@ -40,12 +40,12 @@ def dispatch_search(
     search_backend: SUPPORTED_BACKENDS,
     fetch_full_page: bool,
     loop_count: int,
-) -> Tuple[dict[str, Any] | None, list[str], Optional[str], str]:
+) -> tuple[dict[str, Any] | None, list[str], str | None, str]:
     """Execute configured search backend and normalise response payload."""
 
     # Convert enum to string if needed (SearchAPI enum -> "tavily" string)
     backend_str = get_config_value(search_backend)
-   
+
     try:
         search_tool = _get_search_tool()
         raw_response = search_tool.run(
@@ -99,7 +99,7 @@ def dispatch_search(
 
 def prepare_research_context(
     search_result: dict[str, Any] | None,
-    answer_text: Optional[str],
+    answer_text: str | None,
     fetch_full_page: bool,
 ) -> tuple[str, str]:
     """Build structured context and source summary for downstream agents."""

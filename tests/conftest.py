@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
-from backend.src.config import Configuration
-from backend.src.models import SummaryState, TodoItem, TaskReview
-
+from backend.src.models import SummaryState, TaskReview, TodoItem
 
 # ---------------------------------------------------------------------------
 # Markers
 # ---------------------------------------------------------------------------
+
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "integration: tests that hit real LLM / network services")
@@ -21,6 +18,7 @@ def pytest_configure(config: pytest.Config) -> None:
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,6 +31,7 @@ def _test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 def _clear_llm_cache() -> None:
     """Reset the global in-memory LLM cache between tests to avoid cross-contamination."""
     from backend.src.cache import llm_cache
+
     with llm_cache._lock:
         llm_cache._store.clear()
 
@@ -40,6 +39,7 @@ def _clear_llm_cache() -> None:
 # ---------------------------------------------------------------------------
 # Model factories
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def sample_state() -> SummaryState:
@@ -80,6 +80,7 @@ def failing_review() -> TaskReview:
 # ---------------------------------------------------------------------------
 # Fake agent helpers
 # ---------------------------------------------------------------------------
+
 
 class FakeAgent:
     """Minimal stand-in for SimpleAgent. Supports single or sequential responses."""

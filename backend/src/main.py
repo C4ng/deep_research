@@ -1,7 +1,7 @@
 import json
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
@@ -40,10 +40,9 @@ def _setup_logging() -> None:
     if os.getenv("TESTING") != "1":
         file_handler = logging.FileHandler("backend_debug.log", encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-        )
+        file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
         logging.getLogger().addHandler(file_handler)
+
 
 class ResearchRequest(BaseModel):
     """Payload for triggering a research run."""
@@ -54,12 +53,11 @@ class ResearchRequest(BaseModel):
         description="Override the default search backend configured via env",
     )
 
+
 class ResearchResponse(BaseModel):
     """HTTP response containing the generated report and structured tasks."""
 
-    report_markdown: str = Field(
-        ..., description="Markdown-formatted research report including sections"
-    )
+    report_markdown: str = Field(..., description="Markdown-formatted research report including sections")
     todo_items: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Structured TODO items with summaries and sources",
@@ -69,7 +67,8 @@ class ResearchResponse(BaseModel):
         description="Aggregate LLM token consumption for the pipeline run",
     )
 
-def _mask_secret(value: Optional[str], visible: int = 4) -> str:
+
+def _mask_secret(value: str | None, visible: int = 4) -> str:
     """Mask sensitive tokens while keeping leading and trailing characters."""
     if not value:
         return "unset"
@@ -79,13 +78,15 @@ def _mask_secret(value: Optional[str], visible: int = 4) -> str:
 
     return f"{value[:visible]}...{value[-visible:]}"
 
+
 def _build_config(payload: ResearchRequest) -> Configuration:
-    overrides: Dict[str, Any] = {}
+    overrides: dict[str, Any] = {}
 
     if payload.search_api is not None:
         overrides["search_api"] = payload.search_api
 
     return Configuration.from_env(overrides=overrides)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -105,11 +106,12 @@ async def lifespan(app: FastAPI):
         config.strip_thinking_tokens,
         _mask_secret(config.llm_api_key),
     )
-    
+
     yield
-    
+
     # Shutdown (if needed in the future)
     logger.info("Application shutting down...")
+
 
 def create_app() -> FastAPI:
     _setup_logging()
@@ -126,9 +128,9 @@ def create_app() -> FastAPI:
     )
 
     @app.get("/healthz")
-    def health_check() -> Dict[str, str]:
+    def health_check() -> dict[str, str]:
         return {"status": "ok"}
-    
+
     @app.post("/research", response_model=ResearchResponse)
     def run_research(payload: ResearchRequest) -> ResearchResponse:
         try:
@@ -152,7 +154,7 @@ def create_app() -> FastAPI:
                 "query": item.query,
                 "status": item.status,
                 "summary": item.summary,
-                "sources_summary": item.sources_summary
+                "sources_summary": item.sources_summary,
             }
             for item in result.todo_items
         ]
@@ -197,15 +199,10 @@ def create_app() -> FastAPI:
 
     return app
 
+
 app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")

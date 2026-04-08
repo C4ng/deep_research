@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from backend.src.agent import DeepResearchAgent
+from backend.src.agent import DeepResearchAgent  # noqa: E402
 
 
 @pytest.mark.integration

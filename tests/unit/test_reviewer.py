@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.src.models import SummaryState, TodoItem, TaskReview
+from backend.src.models import SummaryState, TaskReview, TodoItem
 from backend.src.services.reviewer import ReviewerService
 
 
@@ -147,12 +147,10 @@ def test_reviewer_parses_markdown_fenced_json():
 def test_reviewer_partial_parse_recovers_truncated_json():
     """When the JSON is truncated but contains recognisable fields, partial parsing succeeds."""
     state, task = _make_state_and_task()
-    truncated = "```json\n{ \"coverage_score\": 0.9"
+    truncated = '```json\n{ "coverage_score": 0.9'
     reviewer = ReviewerService(_FakeAgent(truncated), strip_thinking_tokens=True)
     review = reviewer.review_task(state, task, context="ctx")
     assert review.coverage_score == pytest.approx(0.9)
     # Unrecoverable fields fall back to defaults.
     assert review.reliability_score == pytest.approx(0.5)
     assert review.clarity_score == pytest.approx(0.5)
-
-

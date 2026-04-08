@@ -58,4 +58,3 @@ def test_reporting_prompt_and_strip_think():
     assert "Execution status:" in prompt
     assert "Task summary:" in prompt
     assert "Sources summary:" in prompt
-

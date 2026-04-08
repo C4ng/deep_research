@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import time
-from collections import OrderedDict
-from threading import Lock
-from typing import Any, Dict, Tuple
 import hashlib
 import json
 import os
+import time
+from collections import OrderedDict
 from pathlib import Path
+from threading import Lock
+from typing import Any
 
 
 class LLMCache:
@@ -16,10 +16,10 @@ class LLMCache:
     def __init__(self, max_size: int = 256, ttl_seconds: float = 3600) -> None:
         self._max_size = max_size
         self._ttl = ttl_seconds
-        self._store: OrderedDict[Tuple[str, str], Tuple[float, Any]] = OrderedDict()
+        self._store: OrderedDict[tuple[str, str], tuple[float, Any]] = OrderedDict()
         self._lock = Lock()
 
-    def _make_key(self, namespace: str, prompt: str) -> Tuple[str, str]:
+    def _make_key(self, namespace: str, prompt: str) -> tuple[str, str]:
         digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
         return namespace, digest
 
@@ -80,7 +80,8 @@ class StageFileCache:
             return None
         with self._lock:
             try:
-                return json.loads(path.read_text(encoding="utf-8"))
+                result: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+                return result
             except Exception:
                 return None
 
@@ -94,4 +95,3 @@ class StageFileCache:
 
 # Global file cache for planner/search/reviewer/summary/report stages.
 stage_file_cache = StageFileCache()
-

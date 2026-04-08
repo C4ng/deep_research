@@ -81,9 +81,7 @@ class TestSSEEndpoint:
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers["content-type"]
 
-        lines = [
-            line for line in resp.text.strip().split("\n\n") if line.startswith("data:")
-        ]
+        lines = [line for line in resp.text.strip().split("\n\n") if line.startswith("data:")]
         assert len(lines) == 2
         first = json.loads(lines[0].removeprefix("data: "))
         assert first["type"] == "status"
@@ -102,9 +100,7 @@ class TestSSEEndpoint:
 
         resp = client.post("/research/stream", json={"topic": "test"})
         assert resp.status_code == 200
-        lines = [
-            line for line in resp.text.strip().split("\n\n") if line.startswith("data:")
-        ]
+        lines = [line for line in resp.text.strip().split("\n\n") if line.startswith("data:")]
         last_event = json.loads(lines[-1].removeprefix("data: "))
         assert last_event["type"] == "error"
         assert "stream failure" in last_event["detail"]

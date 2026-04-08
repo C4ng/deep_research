@@ -19,5 +19,3 @@ def test_configuration_from_env_parsing(monkeypatch: pytest.MonkeyPatch) -> None
     assert config.search_api == SearchAPI.TAVILY
     # Boolean fields should be parsed from strings.
     assert config.fetch_full_page is False
-
-

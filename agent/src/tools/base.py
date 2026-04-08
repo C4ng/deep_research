@@ -1,19 +1,22 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Tuple, Type
+from typing import Any
+
 from pydantic import BaseModel, ValidationError
+
 
 class Tool(ABC):
     """
     Base tool class.
     Forces strict validation before execution.
     """
+
     def __init__(self, name: str, description: str):
         self.name = name
         self.description = description
 
     @property
     @abstractmethod
-    def args_schema(self) -> Type[BaseModel]:
+    def args_schema(self) -> type[BaseModel]:
         """
         Use a Pydantic model class as the schema.
         This provides automatic validation and OpenAI schema generation.
@@ -25,7 +28,7 @@ class Tool(ABC):
         """The actual logic of the tool."""
         pass
 
-    def run(self, parameters: Dict[str, Any]) -> str:
+    def run(self, parameters: dict[str, Any]) -> str:
         """
         The public entry point. Handles validation automatically.
         """
@@ -39,13 +42,13 @@ class Tool(ABC):
         except Exception as e:
             return f"Error: Execution failed in {self.name}. {str(e)}"
 
-    def to_openai_schema(self) -> Dict[str, Any]:
+    def to_openai_schema(self) -> dict[str, Any]:
         """
         Uses Pydantic's internal json_schema to generate the OpenAI format.
         This is much more robust than manual dictionary building.
         """
         schema = self.args_schema.model_json_schema()
-        
+
         # Clean up the Pydantic schema to match OpenAI's 'function' expectations
         return {
             "type": "function",
@@ -55,7 +58,7 @@ class Tool(ABC):
                 "parameters": {
                     "type": "object",
                     "properties": schema.get("properties", {}),
-                    "required": schema.get("required", [])
-                }
-            }
+                    "required": schema.get("required", []),
+                },
+            },
         }

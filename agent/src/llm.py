@@ -2,9 +2,10 @@ import logging
 import os
 import time
 from collections import deque
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any
 
 import openai
 from openai import AsyncOpenAI, OpenAI
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class UsageStats:
     """Accumulated token usage across LLM calls."""
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
@@ -35,7 +37,7 @@ class UsageStats:
             self.total_tokens += prompt + completion
             self.call_count += 1
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         with self._lock:
             return {
                 "prompt_tokens": self.prompt_tokens,
@@ -67,13 +69,13 @@ def _log_retry(retry_state: RetryCallState) -> None:
 class LLM:
     def __init__(
         self,
-        model_id: Optional[str] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        timeout: Optional[int] = None,
+        model_id: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        max_tokens: int | None = None,
+        timeout: int | None = None,
         **kwargs,
     ):
         self.model_id = model_id or os.getenv("LLM_MODEL_ID")
@@ -105,10 +107,12 @@ class LLM:
     _rate_limit_retry = retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=2, min=5, max=60),
-        retry=retry_if_exception_type((
-            openai.RateLimitError,
-            openai.APIConnectionError,
-        )),
+        retry=retry_if_exception_type(
+            (
+                openai.RateLimitError,
+                openai.APIConnectionError,
+            )
+        ),
         before_sleep=_log_retry,
         reraise=True,
     )
@@ -116,10 +120,12 @@ class LLM:
     _standard_retry = retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((
-            openai.APITimeoutError,
-            openai.InternalServerError,
-        )),
+        retry=retry_if_exception_type(
+            (
+                openai.APITimeoutError,
+                openai.InternalServerError,
+            )
+        ),
         before_sleep=_log_retry,
         reraise=True,
     )
@@ -165,15 +171,15 @@ class LLM:
 
     @_rate_limit_retry
     @_standard_retry
-    def generate(self, messages: List[Dict[str, str]], **kwargs) -> str:
+    def generate(self, messages: list[dict[str, str]], **kwargs) -> str:
         """Generate a non-streaming response from the LLM."""
         self._throttle_requests()
 
         params = self._get_params(kwargs)
         try:
             response = self.client.chat.completions.create(
-                model=self.model_id,
-                messages=messages,
+                model=self.model_id,  # type: ignore[arg-type]
+                messages=messages,  # type: ignore[arg-type]
                 **params,
             )
             if response.usage:
@@ -189,47 +195,48 @@ class LLM:
             return response.choices[0].message.content or ""
         except Exception as e:
             self._handle_llm_exception("generate", e)
+            return ""  # unreachable; _handle_llm_exception always raises
 
     @_rate_limit_retry
     @_standard_retry
-    def stream(self, messages: List[Dict[str, str]], **kwargs) -> Iterator[str]:
+    def stream(self, messages: list[dict[str, str]], **kwargs) -> Iterator[str]:
         """Stream response fragments from the LLM."""
         self._throttle_requests()
 
         params = self._get_params({**kwargs, "stream": True})
         try:
             response = self.client.chat.completions.create(
-                model=self.model_id,
-                messages=messages,
+                model=self.model_id,  # type: ignore[arg-type]
+                messages=messages,  # type: ignore[arg-type]
                 **params,
             )
 
-            for chunk in response:
-                if hasattr(chunk, "usage") and chunk.usage:
+            for chunk in response:  # type: ignore[union-attr]
+                if hasattr(chunk, "usage") and chunk.usage:  # type: ignore[attr-defined]
                     self.usage.record(
-                        getattr(chunk.usage, "prompt_tokens", 0) or 0,
-                        getattr(chunk.usage, "completion_tokens", 0) or 0,
+                        getattr(chunk.usage, "prompt_tokens", 0) or 0,  # type: ignore[attr-defined]
+                        getattr(chunk.usage, "completion_tokens", 0) or 0,  # type: ignore[attr-defined]
                     )
 
-                if not chunk.choices:
+                if not chunk.choices:  # type: ignore[attr-defined]
                     continue
 
-                delta = chunk.choices[0].delta
+                delta = chunk.choices[0].delta  # type: ignore[attr-defined]
 
                 if hasattr(delta, "content") and delta.content:
                     yield delta.content
 
-                if chunk.choices[0].finish_reason == "content_filter":
+                if chunk.choices[0].finish_reason == "content_filter":  # type: ignore[attr-defined]
                     logger.warning("LLM:stream content omitted due to safety filters")
                     break
-                elif chunk.choices[0].finish_reason == "length":
+                elif chunk.choices[0].finish_reason == "length":  # type: ignore[attr-defined]
                     logger.warning("LLM:stream response truncated due to max_tokens")
                     break
 
         except Exception as e:
             self._handle_llm_exception("stream", e)
 
-    def _get_params(self, overrides: Dict[str, Any]) -> Dict[str, Any]:
+    def _get_params(self, overrides: dict[str, Any]) -> dict[str, Any]:
         base = {
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,

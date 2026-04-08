@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 load_dotenv()
 
-from backend.src.main import app, ResearchRequest
+from backend.src.main import ResearchRequest, app  # noqa: E402
 
 
 @pytest.mark.integration
@@ -21,9 +21,7 @@ def test_api_integration():
     assert health_response.status_code == 200
     assert health_response.json() == {"status": "ok"}
 
-    request_payload = ResearchRequest(
-        topic="What is latest progress of the AI agent research?"
-    )
+    request_payload = ResearchRequest(topic="What is latest progress of the AI agent research?")
 
     response = client.post(
         "/research",

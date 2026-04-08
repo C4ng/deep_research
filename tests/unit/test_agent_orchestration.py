@@ -1,9 +1,9 @@
 import pytest
 
-from backend.src.config import Configuration
-from backend.src.models import SummaryState, TodoItem, TaskReview, TaskStatus
 import backend.src.agent as agent_module
 from backend.src.agent import DeepResearchAgent
+from backend.src.config import Configuration
+from backend.src.models import SummaryState, TaskReview, TaskStatus, TodoItem
 
 
 class _FakeReviewer:
@@ -32,8 +32,7 @@ class _FakeSummarizer:
 
     def stream_task_summary(self, state, task, context):
         def gen():
-            for c in self.stream_chunks:
-                yield c
+            yield from self.stream_chunks
 
         def getter():
             return "".join(self.stream_chunks)
@@ -210,4 +209,3 @@ def test_execute_task_streaming_event_sequence(monkeypatch: pytest.MonkeyPatch):
     assert types[-1] == "task_status"
     # At least one summary chunk was streamed.
     assert "task_summary_chunk" in types
-

@@ -1,18 +1,19 @@
 from __future__ import annotations
-from typing import List, Any, Optional
-
-from backend.src.config import Configuration
-from agent.src.agents.simple_agent import SimpleAgent
-from backend.src.models import SummaryState, TodoItem
-from backend.src.prompts import todo_planner_instructions, get_current_date
-from backend.src.utils import strip_thinking_tokens
-from backend.src.cache import llm_cache
-from backend.src.exceptions import PlanningError
 
 import json
 import logging
+from typing import Any
+
+from agent.src.agents.simple_agent import SimpleAgent
+from backend.src.cache import llm_cache
+from backend.src.config import Configuration
+from backend.src.exceptions import PlanningError
+from backend.src.models import SummaryState, TodoItem
+from backend.src.prompts import get_current_date, todo_planner_instructions
+from backend.src.utils import strip_thinking_tokens
 
 logger = logging.getLogger(__name__)
+
 
 class PlanningService:
     """Wraps the planner agent to produce structured TODO items."""
@@ -21,7 +22,7 @@ class PlanningService:
         self._agent = planner_agent
         self._strip_thinking_tokens = config.strip_thinking_tokens
 
-    def plan_todo_list(self, state: SummaryState) -> List[TodoItem]:
+    def plan_todo_list(self, state: SummaryState) -> list[TodoItem]:
         """Ask the planner agent to break the topic into actionable tasks."""
 
         prompt = todo_planner_instructions.format(
@@ -38,7 +39,7 @@ class PlanningService:
             response = cached
             logger.info("Planner cache hit for topic %r", state.research_topic)
         else:
-            response: str = ""
+            response = ""
             try:
                 response = self._agent.run(prompt)
                 if response:
@@ -51,18 +52,18 @@ class PlanningService:
         logger.info("Planner raw output (truncated): %s", response[:1000] if response else "")
 
         tasks_payload = self._extract_tasks(response)
-        todo_items: List[TodoItem] = []
+        todo_items: list[TodoItem] = []
 
         if not tasks_payload:
             return [self.create_fallback_task(state)]
-        
+
         for idx, item in enumerate(tasks_payload, start=1):
             title = str(item.get("title") or f"Task {idx}").strip()
             intent = str(item.get("intent") or "Focus on the key issues of the topic").strip()
             query = str(item.get("query") or state.research_topic).strip()
 
             if not query:
-                query = state.research_topic
+                query = state.research_topic or ""
 
             task = TodoItem(
                 id=idx,
@@ -71,13 +72,12 @@ class PlanningService:
                 query=query,
             )
             todo_items.append(task)
-        
+
         state.todo_items = todo_items
 
         titles = [task.title for task in todo_items]
         logger.info("Planner produced %d tasks: %s", len(todo_items), titles)
         return todo_items
-
 
     @staticmethod
     def create_fallback_task(state: SummaryState) -> TodoItem:
@@ -90,11 +90,10 @@ class PlanningService:
             query=f"{state.research_topic} latest developments" if state.research_topic else "Background Research",
         )
 
-
     # ------------------------------------------------------------------
     # Parsing helpers
     # ------------------------------------------------------------------
-    def _extract_tasks(self, raw_response: str) -> List[dict[str, Any]]:
+    def _extract_tasks(self, raw_response: str) -> list[dict[str, Any]]:
         """Parse planner output into a list of task dictionaries."""
 
         text = raw_response.strip()
@@ -102,7 +101,7 @@ class PlanningService:
             text = strip_thinking_tokens(text)
 
         json_payload = self._extract_json_payload(text)
-        tasks: List[dict[str, Any]] = []
+        tasks: list[dict[str, Any]] = []
 
         if isinstance(json_payload, dict):
             candidate = json_payload.get("tasks")
@@ -116,10 +115,10 @@ class PlanningService:
                     tasks.append(item)
 
         return tasks
-    
-    def _extract_json_payload(self, text: str) -> Optional[dict[str, Any] | list]:
+
+    def _extract_json_payload(self, text: str) -> dict[str, Any] | list | None:
         """Try to locate and parse a JSON object or array from the text."""
-        
+
         # Try to find the complete JSON (from the first { to the last matching })
         # Using stack to match braces
         def find_matching_brace(text: str, start_pos: int, open_char: str, close_char: str):
@@ -133,23 +132,25 @@ class PlanningService:
                 elif text[i] == close_char:
                     depth -= 1
                     if depth == 0:
-                        return text[start:i+1]
+                        return text[start : i + 1]
             return None
-        
+
         # Try to find the object
         json_str = find_matching_brace(text, 0, "{", "}")
         if json_str:
             try:
-                return json.loads(json_str)
+                result: dict[str, Any] | list[Any] = json.loads(json_str)
+                return result
             except json.JSONDecodeError:
                 pass
-        
+
         # Try to find the array
         json_str = find_matching_brace(text, 0, "[", "]")
         if json_str:
             try:
-                return json.loads(json_str)
+                result_arr: dict[str, Any] | list[Any] = json.loads(json_str)
+                return result_arr
             except json.JSONDecodeError:
                 pass
-        
+
         return None
